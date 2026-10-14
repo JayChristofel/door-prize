@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 
 interface WinnerItem {
-  id: number;
-  participantId: number;
+  id: string;
+  participantId: string;
   name: string;
   round: number;
 }

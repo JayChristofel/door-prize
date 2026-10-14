@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { participants } from "@/drizzle/schema";
-import { eq, asc, inArray } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 
-export const dynamic = "force-dynamic";
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const allParticipants = await db
       .select()
@@ -33,12 +31,12 @@ export async function POST(request: NextRequest) {
 
     // Support batch insertion: { names: string[] }
     if (Array.isArray(body.names) && body.names.length > 0) {
-      const trimmedNames = body.names
+      const trimmedNames: string[] = body.names
         .map((n: unknown) => (typeof n === "string" ? n.trim() : ""))
         .filter((n: string) => n.length > 0);
 
       // Deduplicate within the provided batch itself
-      const uniqueNames = Array.from(new Set(trimmedNames));
+      const uniqueNames: string[] = Array.from(new Set(trimmedNames));
       if (uniqueNames.length === 0) {
         return NextResponse.json(
           { error: "No valid names provided" },
@@ -50,9 +48,9 @@ export async function POST(request: NextRequest) {
       const existing = await db.select({ name: participants.name }).from(participants);
       const existingLower = new Set(existing.map((e) => e.name.toLowerCase()));
 
-      const toInsert = uniqueNames
-        .filter((name) => !existingLower.has(name.toLowerCase()))
-        .map((name) => ({ name }));
+      const toInsert: { name: string }[] = uniqueNames
+        .filter((name: string) => !existingLower.has(name.toLowerCase()))
+        .map((name: string) => ({ name }));
 
       let inserted: { id: string; name: string; createdAt: Date | null }[] = [];
       if (toInsert.length > 0) {

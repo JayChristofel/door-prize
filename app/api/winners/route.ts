@@ -4,9 +4,7 @@ import { db } from "@/lib/db";
 import { winners } from "@/drizzle/schema";
 import { asc, eq } from "drizzle-orm";
 
-export const dynamic = "force-dynamic";
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const allWinners = await db
       .select({
