@@ -54,7 +54,6 @@ function WinnerModal({
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  // Precomputed confetti particles satisfying React 19 pure component render rules
   const confettiPieces = useMemo(() => {
     return Array.from({ length: 40 }, (_, i) => ({
       id: i,
@@ -68,39 +67,21 @@ function WinnerModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-ink/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
 
-      {/* Confetti streams */}
       <div className="absolute left-0 top-0 bottom-0 w-1/2 overflow-hidden pointer-events-none">
         {confettiPieces.filter((c) => c.side === "left").map((c) => (
-          <ConfettiPiece
-            key={`l-${c.id}`}
-            side="left"
-            delay={c.delay}
-            color={c.color}
-            width={c.width}
-            height={c.height}
-          />
+          <ConfettiPiece key={`l-${c.id}`} side="left" delay={c.delay} color={c.color} width={c.width} height={c.height} />
         ))}
       </div>
 
       <div className="absolute right-0 top-0 bottom-0 w-1/2 overflow-hidden pointer-events-none">
         {confettiPieces.filter((c) => c.side === "right").map((c) => (
-          <ConfettiPiece
-            key={`r-${c.id}`}
-            side="right"
-            delay={c.delay}
-            color={c.color}
-            width={c.width}
-            height={c.height}
-          />
+          <ConfettiPiece key={`r-${c.id}`} side="right" delay={c.delay} color={c.color} width={c.width} height={c.height} />
         ))}
       </div>
 
-      {/* Modal Dialog Card */}
       <div className="relative animate-modal-pop bg-surface border border-gold/30 shadow-2xl shadow-gold/20 rounded-3xl px-8 py-10 max-w-lg w-full text-center flex flex-col items-center">
-        {/* Gold top accent */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-1.5 bg-gradient-to-r from-transparent via-gold to-transparent rounded-b-full shadow-sm" />
 
         <div className="w-14 h-14 rounded-2xl bg-gold/15 border border-gold/30 flex items-center justify-center text-gold-dark mb-4 shadow-sm">
@@ -134,6 +115,11 @@ function WinnerModal({
               <p className="text-lg font-bold text-gold-dark flex-1 truncate text-left">
                 {w.name}
               </p>
+              {w.column && (
+                <span className="text-[10px] font-medium text-faint bg-surface border border-line px-2 py-0.5 rounded-full">
+                  {w.column}
+                </span>
+              )}
               <span className="text-[10px] uppercase font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
                 Terpilih
               </span>
@@ -219,12 +205,12 @@ export default function Home() {
     }
   };
 
-  const addParticipant = async (name: string): Promise<boolean> => {
+  const addParticipant = async (name: string, column: string): Promise<boolean> => {
     try {
       const r = await fetch("/api/participants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, column }),
       });
       if (r.ok) {
         const data: Participant = await r.json();
@@ -237,12 +223,12 @@ export default function Home() {
     }
   };
 
-  const batchAddParticipants = async (names: string[]): Promise<{ added: number; skipped: number }> => {
+  const batchAddParticipants = async (names: string[], column: string): Promise<{ added: number; skipped: number }> => {
     try {
       const r = await fetch("/api/participants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ names }),
+        body: JSON.stringify({ names, column }),
       });
       if (r.ok) {
         const data = await r.json();
@@ -346,7 +332,6 @@ export default function Home() {
         setHighlight(rnd.id);
         elapsed += 50;
 
-        // Play tick sound with pitch ramp
         sound.playTick(1.0 + (elapsed / total) * 0.3);
 
         if (elapsed < slowAt) {
@@ -358,11 +343,11 @@ export default function Home() {
           setHighlight(null);
           (async () => {
             try {
-              // Batch save winners atomically
               const toInsert = picked.map((w) => ({
                 participantId: w.id,
                 name: w.name,
                 round,
+                column: w.column || null,
               }));
 
               const r = await fetch("/api/winners", {

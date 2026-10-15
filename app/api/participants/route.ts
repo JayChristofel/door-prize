@@ -29,13 +29,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Support batch insertion: { names: string[] }
+    // Support batch insertion: { names: string[], column?: string }
     if (Array.isArray(body.names) && body.names.length > 0) {
       const trimmedNames: string[] = body.names
         .map((n: unknown) => (typeof n === "string" ? n.trim() : ""))
         .filter((n: string) => n.length > 0);
 
-      // Deduplicate within the provided batch itself
       const uniqueNames: string[] = Array.from(new Set(trimmedNames));
       if (uniqueNames.length === 0) {
         return NextResponse.json(
@@ -44,15 +43,16 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Check existing participants
       const existing = await db.select({ name: participants.name }).from(participants);
       const existingLower = new Set(existing.map((e) => e.name.toLowerCase()));
 
-      const toInsert: { name: string }[] = uniqueNames
-        .filter((name: string) => !existingLower.has(name.toLowerCase()))
-        .map((name: string) => ({ name }));
+      const columnValue = typeof body.column === "string" ? body.column.trim() || null : null;
 
-      let inserted: { id: string; name: string; createdAt: Date | null }[] = [];
+      const toInsert: { name: string; column: string | null }[] = uniqueNames
+        .filter((name: string) => !existingLower.has(name.toLowerCase()))
+        .map((name: string) => ({ name, column: columnValue }));
+
+      let inserted: { id: string; name: string; column: string | null; createdAt: Date | null }[] = [];
       if (toInsert.length > 0) {
         inserted = await db.insert(participants).values(toInsert).returning();
       }
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Single insertion
-    const { name } = body;
+    const { name, column } = body;
     if (!name || typeof name !== "string" || name.trim() === "") {
       return NextResponse.json(
         { error: "Name is required" },
@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
     }
 
     const trimmed = name.trim();
+    const columnValue = typeof column === "string" ? column.trim() || null : null;
 
-    // Check for duplicates (case-insensitive)
     const existing = await db.select({ id: participants.id, name: participants.name }).from(participants);
     const isDuplicate = existing.some((p) => p.name.toLowerCase() === trimmed.toLowerCase());
 
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     const [newParticipant] = await db
       .insert(participants)
-      .values({ name: trimmed })
+      .values({ name: trimmed, column: columnValue })
       .returning();
 
     revalidatePath("/api/participants");
@@ -130,7 +130,6 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // id is UUID string
     await db.delete(participants).where(eq(participants.id, id));
 
     revalidatePath("/api/participants");

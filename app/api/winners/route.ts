@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
         participantId: winners.participantId,
         name: winners.name,
         round: winners.round,
+        column: winners.column,
         createdAt: winners.createdAt,
       })
       .from(winners)
@@ -37,10 +38,11 @@ export async function POST(request: NextRequest) {
 
     // Support batch insertion
     if (Array.isArray(body.items) && body.items.length > 0) {
-      const itemsToInsert = body.items.map((item: { participantId: string; name: string; round?: number }) => ({
+      const itemsToInsert = body.items.map((item: { participantId: string; name: string; round?: number; column?: string | null }) => ({
         participantId: item.participantId,
         name: String(item.name).trim(),
         round: Number(item.round) || 1,
+        column: item.column || null,
       }));
 
       const insertedWinners = await db
@@ -54,7 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(insertedWinners, { status: 201 });
     }
 
-    const { participantId, name, round } = body;
+    const { participantId, name, round, column } = body;
 
     if (!participantId || !name) {
       return NextResponse.json(
@@ -69,6 +71,7 @@ export async function POST(request: NextRequest) {
         participantId,
         name: String(name).trim(),
         round: Number(round) || 1,
+        column: column || null,
       })
       .returning();
 
@@ -91,7 +94,6 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get("id");
 
     if (id) {
-      // Delete a single winner (e.g. if absent/disqualified)
       await db.delete(winners).where(eq(winners.id, id));
       revalidatePath("/api/winners");
       revalidatePath("/");

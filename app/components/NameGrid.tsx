@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Participant } from "@/lib/types";
 
 interface Props {
@@ -20,8 +20,24 @@ export default function NameGrid({
 }: Props) {
   const [count, setCount] = useState(1);
   const [mode, setMode] = useState<"single" | "bulk">("single");
+  const [selectedColumn, setSelectedColumn] = useState<string>("all");
 
-  const eligible = participants.filter((p) => !drawnWinnerIds.has(p.id));
+  // Get unique columns
+  const columns = useMemo(() => {
+    const cols = new Set<string>();
+    participants.forEach((p) => {
+      if (p.column) cols.add(p.column);
+    });
+    return Array.from(cols).sort();
+  }, [participants]);
+
+  // Filter by selected column
+  const filteredParticipants = useMemo(() => {
+    if (selectedColumn === "all") return participants;
+    return participants.filter((p) => p.column === selectedColumn);
+  }, [participants, selectedColumn]);
+
+  const eligible = filteredParticipants.filter((p) => !drawnWinnerIds.has(p.id));
   const maxPossible = Math.max(1, eligible.length);
   const canDraw = !isDrawing && eligible.length > 0 && count > 0;
 
@@ -37,38 +53,58 @@ export default function NameGrid({
   return (
     <div className="flex flex-col h-full">
       {/* Control bar */}
-      <div className="bg-surface border border-line shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4 px-5 py-4 rounded-2xl">
-        {/* Mode toggle */}
-        <div className="flex items-center gap-1 bg-cream rounded-xl border border-line p-1">
-          <button
-            onClick={() => handleModeChange("single")}
-            disabled={isDrawing}
-            className={`px-4 py-2 rounded-lg text-[11px] font-semibold tracking-wider uppercase transition-all cursor-pointer ${
-              mode === "single"
-                ? "bg-gold/15 text-gold-dark border border-gold/30 shadow-xs"
-                : "text-muted hover:text-ink border border-transparent"
-            }`}
-          >
-            Satu per Satu
-          </button>
-          <button
-            onClick={() => handleModeChange("bulk")}
-            disabled={isDrawing}
-            className={`px-4 py-2 rounded-lg text-[11px] font-semibold tracking-wider uppercase transition-all cursor-pointer ${
-              mode === "bulk"
-                ? "bg-gold/15 text-gold-dark border border-gold/30 shadow-xs"
-                : "text-muted hover:text-ink border border-transparent"
-            }`}
-          >
-            Sekaligus
-          </button>
+      <div className="bg-surface border border-line shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 mb-4 px-5 py-4 rounded-2xl">
+        {/* Mode toggle + Column filter */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-cream rounded-xl border border-line p-1">
+            <button
+              onClick={() => handleModeChange("single")}
+              disabled={isDrawing}
+              className={`px-4 py-2 rounded-lg text-[11px] font-semibold tracking-wider uppercase transition-all cursor-pointer ${
+                mode === "single"
+                  ? "bg-gold/15 text-gold-dark border border-gold/30 shadow-xs"
+                  : "text-muted hover:text-ink border border-transparent"
+              }`}
+            >
+              Satu per Satu
+            </button>
+            <button
+              onClick={() => handleModeChange("bulk")}
+              disabled={isDrawing}
+              className={`px-4 py-2 rounded-lg text-[11px] font-semibold tracking-wider uppercase transition-all cursor-pointer ${
+                mode === "bulk"
+                  ? "bg-gold/15 text-gold-dark border border-gold/30 shadow-xs"
+                  : "text-muted hover:text-ink border border-transparent"
+              }`}
+            >
+              Sekaligus
+            </button>
+          </div>
+
+          {/* Column filter dropdown */}
+          {columns.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-faint uppercase tracking-wider font-semibold">Kolom</span>
+              <select
+                value={selectedColumn}
+                onChange={(e) => setSelectedColumn(e.target.value)}
+                disabled={isDrawing}
+                className="px-3 py-2 rounded-lg bg-cream border border-line text-xs font-medium text-ink focus:outline-none focus:border-gold/50 disabled:opacity-50 cursor-pointer"
+              >
+                <option value="all">Semua Kolom</option>
+                {columns.map((col) => (
+                  <option key={col} value={col}>{col}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Count stepper & Stats */}
-        <div className="flex items-center justify-between sm:justify-end gap-4">
+        <div className="flex items-center justify-between lg:justify-end gap-4">
           <div className="text-right">
             <span className="text-[10px] uppercase font-mono tracking-wider text-faint">
-              Sisa {eligible.length} dari {participants.length}
+              Sisa {eligible.length} dari {filteredParticipants.length}
             </span>
           </div>
 
@@ -147,7 +183,7 @@ export default function NameGrid({
       </div>
 
       {/* Grid */}
-      {participants.length === 0 ? (
+      {filteredParticipants.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-faint/60 border border-dashed border-line rounded-2xl gap-4 p-8">
           <div className="w-16 h-16 rounded-2xl bg-cream flex items-center justify-center text-gold/60 border border-line">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -165,7 +201,7 @@ export default function NameGrid({
       ) : (
         <div className="flex-1 overflow-y-auto pr-1 pb-2">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-            {participants.map((p) => {
+            {filteredParticipants.map((p) => {
               const isWinner = drawnWinnerIds.has(p.id);
               const isHL = currentHighlight === p.id;
               const dim = isDrawing && !isHL && !isWinner;
@@ -192,6 +228,9 @@ export default function NameGrid({
                   >
                     {p.name}
                   </span>
+                  {p.column && (
+                    <span className="block text-[9px] text-gold-dark/70 mt-0.5 truncate">Kolom: {p.column}</span>
+                  )}
 
                   {isWinner && (
                     <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gold text-white flex items-center justify-center shadow-xs">

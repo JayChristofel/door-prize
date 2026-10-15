@@ -5,10 +5,10 @@ import { Participant } from "@/lib/types";
 
 interface Props {
   participants: Participant[];
-  onAdd: (name: string) => Promise<boolean>;
-  onBatchAdd?: (names: string[]) => Promise<{ added: number; skipped: number }>;
+  onAdd: (name: string, column: string) => Promise<boolean>;
+  onBatchAdd: (names: string[], column: string) => Promise<{ added: number; skipped: number }>;
   onDelete: (id: string) => Promise<boolean>;
-  onDeleteAll?: () => Promise<boolean>;
+  onDeleteAll: () => Promise<boolean>;
   disabled: boolean;
   visible: boolean;
   onToggle: () => void;
@@ -25,6 +25,9 @@ export default function ParticipantInput({
   onToggle,
 }: Props) {
   const [name, setName] = useState("");
+  const [column, setColumn] = useState("");
+  const [newColumn, setNewColumn] = useState("");
+  const [showNewColumn, setShowNewColumn] = useState(false);
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -36,11 +39,22 @@ export default function ParticipantInput({
     setTimeout(() => setNote(null), 3500);
   };
 
+  // Get unique columns from existing participants
+  const existingColumns = useMemo(() => {
+    const cols = new Set<string>();
+    participants.forEach((p) => {
+      if (p.column) cols.add(p.column);
+    });
+    return Array.from(cols).sort();
+  }, [participants]);
+
   const filteredParticipants = useMemo(() => {
     if (!search.trim()) return participants;
     const q = search.toLowerCase();
     return participants.filter((p) => p.name.toLowerCase().includes(q));
   }, [participants, search]);
+
+  const selectedColumnValue = showNewColumn ? newColumn.trim() : column;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,10 +63,12 @@ export default function ParticipantInput({
 
     setBusy(true);
     try {
-      const ok = await onAdd(trimmed);
+      const ok = await onAdd(trimmed, selectedColumnValue);
       if (ok) {
         flash(`"${trimmed}" berhasil ditambahkan`, true);
         setName("");
+        setNewColumn("");
+        setShowNewColumn(false);
       } else {
         flash("Nama sudah terdaftar dalam sistem", false);
       }
@@ -70,46 +86,39 @@ export default function ParticipantInput({
     setBusy(true);
     try {
       const text = await file.text();
-      // Split by newlines or commas
       const rawLines = text
         .split(/[\r\n]+/)
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
 
-      // Extract names from potential CSV format (e.g., "1,John Doe" or "John Doe")
-      const extractedNames = rawLines.map((line) => {
-        const parts = line.split(",");
-        // If first column is a number, take the second column if available
-        if (parts.length > 1 && /^\d+$/.test(parts[0].trim())) {
-          return parts[1].replace(/["']/g, "").trim();
+      // Parse format: "Nama" or "Nama | Kolom" or "Nama, Kolom"
+      const parsed = rawLines.map((line) => {
+        // Try pipe separator first
+        if (line.includes("|")) {
+          const [name, col] = line.split("|").map((s) => s.trim());
+          return { name, column: col || "" };
         }
-        return parts[0].replace(/["']/g, "").trim();
-      }).filter((n) => n.length > 0);
+        // Try comma separator (but not if it looks like "1,Name")
+        if (line.includes(",") && !/^\d+,/.test(line)) {
+          const [name, col] = line.split(",").map((s) => s.trim());
+          return { name, column: col || "" };
+        }
+        return { name: line, column: "" };
+      }).filter((p) => p.name.length > 0);
 
-      if (extractedNames.length === 0) {
+      const names = parsed.map((p) => p.name);
+      if (names.length === 0) {
         flash("File tidak berisi nama yang valid", false);
         return;
       }
 
-      if (onBatchAdd) {
-        const res = await onBatchAdd(extractedNames);
-        flash(
-          res.added > 0
-            ? `${res.added} peserta ditambahkan (${res.skipped} terduplikasi/dilewati)`
-            : "Semua nama sudah terdaftar sebelumnya",
-          res.added > 0
-        );
-      } else {
-        // Fallback to sequential
-        let added = 0;
-        let skipped = 0;
-        for (const n of extractedNames) {
-          const ok = await onAdd(n);
-          if (ok) added++;
-          else skipped++;
-        }
-        flash(`${added} ditambahkan, ${skipped} dilewati`, added > 0);
-      }
+      const res = await onBatchAdd(names, selectedColumnValue);
+      flash(
+        res.added > 0
+          ? `${res.added} peserta ditambahkan (${res.skipped} terduplikasi/dilewati)`
+          : "Semua nama sudah terdaftar sebelumnya",
+        res.added > 0
+      );
     } catch (err) {
       console.error(err);
       flash("Gagal membaca atau memproses file", false);
@@ -140,7 +149,7 @@ export default function ParticipantInput({
   };
 
   const handleDeleteAll = async () => {
-    if (!onDeleteAll || !participants.length || disabled || busy) return;
+    if (!participants.length || disabled || busy) return;
     const confirmed = window.confirm(
       `PERINGATAN: Hapus SEMUA ${participants.length} peserta dan riwayat undian? Tindakan ini tidak dapat dibatalkan.`
     );
@@ -223,23 +232,68 @@ export default function ParticipantInput({
           {/* Form Content */}
           <div className="p-4 border-b border-line/60 bg-cream/10 space-y-3">
             <form onSubmit={submit}>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Nama peserta baru..."
-                  disabled={disabled || busy}
-                  className="flex-1 px-3.5 py-2.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-faint/60 focus:outline-none focus:border-gold/60 disabled:opacity-50 transition-all shadow-sm"
-                />
-                <button
-                  type="submit"
-                  disabled={disabled || busy || !name.trim()}
-                  className="px-4 py-2.5 rounded-xl bg-gold text-white text-xs font-semibold hover:bg-gold-dark disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer"
-                >
-                  {busy ? "..." : "Tambah"}
-                </button>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nama peserta baru..."
+                disabled={disabled || busy}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-faint/60 focus:outline-none focus:border-gold/60 disabled:opacity-50 transition-all shadow-sm"
+              />
+
+              {/* Column input */}
+              <div className="flex gap-2 mt-2">
+                {!showNewColumn ? (
+                  <>
+                    <select
+                      value={column}
+                      onChange={(e) => setColumn(e.target.value)}
+                      disabled={disabled || busy}
+                      className="flex-1 px-3 py-2.5 rounded-xl bg-surface border border-line text-xs text-ink focus:outline-none focus:border-gold/60 disabled:opacity-50 transition-all shadow-sm cursor-pointer"
+                    >
+                      <option value="">-- Pilih Kolom --</option>
+                      {existingColumns.map((col) => (
+                        <option key={col} value={col}>{col}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewColumn(true)}
+                      disabled={disabled || busy}
+                      className="px-3 py-2.5 rounded-xl border border-dashed border-line text-faint hover:border-gold/50 hover:text-gold-dark text-xs transition-all cursor-pointer"
+                      title="Buat kolom baru"
+                    >
+                      + Baru
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={newColumn}
+                      onChange={(e) => setNewColumn(e.target.value)}
+                      placeholder="Nama kolom baru..."
+                      disabled={disabled || busy}
+                      className="flex-1 px-3 py-2.5 rounded-xl bg-surface border border-line text-xs text-ink placeholder:text-faint/60 focus:outline-none focus:border-gold/60 disabled:opacity-50 transition-all shadow-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewColumn(false); setNewColumn(""); }}
+                      className="px-3 py-2.5 rounded-xl border border-line text-faint hover:text-ink text-xs transition-all cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                  </>
+                )}
               </div>
+
+              <button
+                type="submit"
+                disabled={disabled || busy || !name.trim()}
+                className="mt-2 w-full py-2.5 rounded-xl bg-gold text-white text-xs font-semibold hover:bg-gold-dark disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer"
+              >
+                {busy ? "Menambah..." : "Tambah Peserta"}
+              </button>
             </form>
 
             <div className="flex items-center gap-2 text-faint/60">
@@ -270,6 +324,12 @@ export default function ParticipantInput({
               </svg>
               Upload TXT / CSV Peserta
             </label>
+
+            {selectedColumnValue && (
+              <p className="text-[10px] text-faint text-center">
+                Akan ditambahkan ke kolom: <span className="font-semibold text-gold-dark">{selectedColumnValue}</span>
+              </p>
+            )}
 
             {note && (
               <div
@@ -310,7 +370,12 @@ export default function ParticipantInput({
                   className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-cream/40 border border-line/60 hover:border-gold/30 hover:bg-cream transition-all group"
                 >
                   <span className="text-[10px] font-mono text-faint w-5">{idx + 1}.</span>
-                  <span className="flex-1 text-xs font-medium text-ink truncate">{p.name}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-medium text-ink truncate block">{p.name}</span>
+                    {p.column && (
+                      <span className="text-[9px] text-gold-dark/70">{p.column}</span>
+                    )}
+                  </div>
                   <button
                     onClick={() => handleDelete(p.id, p.name)}
                     disabled={disabled || deletingId === p.id}
@@ -328,7 +393,7 @@ export default function ParticipantInput({
           </div>
 
           {/* Bottom actions: Delete All */}
-          {onDeleteAll && participants.length > 0 && (
+          {participants.length > 0 && (
             <div className="p-4 border-t border-line bg-cream/20">
               <button
                 onClick={handleDeleteAll}

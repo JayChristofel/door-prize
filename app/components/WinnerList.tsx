@@ -26,10 +26,11 @@ export default function WinnerList({
 
   const exportCSV = () => {
     if (!winners.length) return;
-    const h = ["No", "Nama Pemenang", "Ronde", "Waktu Undian"];
+    const h = ["No", "Nama Pemenang", "Kolom", "Ronde", "Waktu Undian"];
     const rows = winners.map((w, i) => [
       i + 1,
       w.name,
+      w.column || "-",
       `Ronde ${w.round}`,
       new Date(w.createdAt).toLocaleString("id-ID"),
     ]);
@@ -46,9 +47,9 @@ export default function WinnerList({
   const copy = async () => {
     if (!winners.length) return;
     const text = [
-      "🏆 DAFTAR PEMENANG DOORPRIZE 🏆",
+      "DAFTAR PEMENANG DOORPRIZE",
       "",
-      ...winners.map((w, i) => `${i + 1}. ${w.name} (Ronde ${w.round})`),
+      ...winners.map((w, i) => `${i + 1}. ${w.name}${w.column ? ` (${w.column})` : ""} - Ronde ${w.round}`),
     ].join("\n");
 
     try {
@@ -184,7 +185,7 @@ export default function WinnerList({
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-ink truncate">{w.name}</p>
                       <p className="text-[10px] text-faint font-mono">
-                        Ronde {w.round} &middot;{" "}
+                        {w.column ? `Kolom: ${w.column} • ` : ""}Ronde {w.round} •{" "}
                         {new Date(w.createdAt).toLocaleTimeString("id-ID", {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -240,7 +241,7 @@ export default function WinnerList({
               </button>
             </div>
 
-            {/* Reset Button with clear label and visual state */}
+            {/* Reset Button */}
             <button
               onClick={handleReset}
               disabled={!winners.length || disabled || isResetting}
